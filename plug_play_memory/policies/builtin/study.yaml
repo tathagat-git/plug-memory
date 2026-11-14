@@ -1,0 +1,50 @@
+name: study
+description: Built-in policy for study/learning agents (tutors, prep companions).
+default: deny
+
+rules:
+  # Memory ops — students can read/write but NOT delete their own history
+  - action: read_memory
+    allow: true
+  - action: write_memory
+    allow: true
+    when:
+      category: [fact, decision, error, achievement, knowledge_gap, convention]
+  - action: delete_memory
+    allow: false
+  - action: recall_memory
+    allow: true
+
+  # Study actions
+  - action: question_asked
+    allow: true
+  - action: answer_attempted
+    allow: true
+  - action: concept_mastered
+    allow: true
+  - action: knowledge_gap_found
+    allow: true
+  - action: goal_set
+    allow: true
+  - action: review_scheduled
+    allow: true
+  - action: fact_observed
+    allow: true
+
+  # Study agents must NOT do these
+  - action: send_email
+    allow: false
+  - action: make_purchase
+    allow: false
+  - action: access_internet
+    allow: false
+  - action: execute_code
+    allow: false
+
+  # Can sync to external study tools ONLY with explicit user approval
+  - action: sync_to_flashcard_app
+    allow: true
+    requires: [approved_by_user]
+  - action: sync_to_notes_app
+    allow: true
+    requires: [approved_by_user]

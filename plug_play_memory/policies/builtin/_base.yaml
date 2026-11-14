@@ -1,0 +1,18 @@
+# Baseline policy. Loaded first for every agent.
+# Cannot be weakened by custom policies — deny rules here are absolute.
+name: _base
+description: Deny-all baseline with defense-in-depth absolute denies.
+default: deny
+
+deny_rules:
+  # These are denied NO MATTER WHAT custom policies say.
+  - action: delete_database
+  - action: drop_table
+  - action: format_disk
+  - action: rce
+  - action: exfiltrate_data
+  - action: modify_audit_log
+  - action: access_credentials
+  - action: modify_secrets
+
+rules: []

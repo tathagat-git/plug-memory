@@ -1,0 +1,30 @@
+{
+  "_comment": "Claude Desktop MCP config — add this to your claude_desktop_config.json",
+  "_comment_locations": {
+    "macOS": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "Linux": "~/.config/Claude/claude_desktop_config.json",
+    "Windows": "%APPDATA%\\Claude\\claude_desktop_config.json"
+  },
+  "_comment_setup": "1. Run: agentmemory init ~/my-agent --type coding",
+  "_comment_setup_2": "2. Edit the paths below to point to your project",
+  "_comment_setup_3": "3. Restart Claude Desktop",
+  "_comment_setup_4": "4. Claude now has 8 memory + permission tools available",
+  "mcpServers": {
+    "plug-play-memory": {
+      "command": "agentmemory",
+      "args": [
+        "serve",
+        "--db",
+        "/absolute/path/to/my-agent/memory.db",
+        "--config",
+        "/absolute/path/to/my-agent/config.yaml",
+        "--policies",
+        "/absolute/path/to/my-agent/policies/custom"
+      ],
+      "env": {
+        "AGENTMEMORY_AGENT_ID": "claude-1",
+        "AGENTMEMORY_AGENT_TYPE": "coding"
+      }
+    }
+  }
+}

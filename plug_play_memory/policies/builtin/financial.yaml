@@ -1,0 +1,50 @@
+name: financial
+description: Built-in policy for financial agents (budgeting, payments, advisory).
+default: deny
+
+rules:
+  # Memory ops — financial data is sensitive; lock down deletes
+  - action: read_memory
+    allow: true
+  - action: write_memory
+    allow: true
+    when:
+      category: [decision, error, achievement, convention, fact]
+  - action: delete_memory
+    allow: false
+  - action: recall_memory
+    allow: true
+
+  # Read-only financial actions
+  - action: read_account_balance
+    allow: true
+  - action: read_transaction_history
+    allow: true
+  - action: categorize_transaction
+    allow: true
+  - action: generate_budget_report
+    allow: true
+  - action: set_budget_limit
+    allow: true
+    requires: [approved_by_user]
+  - action: fact_observed
+    allow: true
+
+  # Tiered payment authorization (uses nested `when` syntax — M2 fix)
+  - action: make_payment
+    allow: true
+    requires: [approved_by_user]
+    when:
+      amount: {le: 1000}
+  - action: make_payment
+    allow: true
+    requires: [approved_by_user, second_factor_verified]
+    when:
+      amount: {le: 10000}
+  # Implicit: payments > 10000 denied by default
+
+  # Hard denials
+  - action: share_data_with_third_party
+    allow: false
+  - action: execute_trade
+    allow: false

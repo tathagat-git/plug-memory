@@ -1,0 +1,73 @@
+# plug-play-memory .gitignore
+
+# Database files
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Project-specific
+policies/custom/*.yaml
+!policies/custom/.gitkeep
+config.yaml
+config.local.yaml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Personal/non-project files (NOT for GitHub)
+.env
+repos/
+upload/
+skills/
+download/
+launch_kit/
+website/
+publish.sh

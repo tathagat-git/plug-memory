@@ -1,0 +1,53 @@
+name: coding
+description: Built-in policy for coding agents (editors, debuggers, refactorers).
+default: deny
+
+rules:
+  # Memory ops
+  - action: read_memory
+    allow: true
+  - action: write_memory
+    allow: true
+    when:
+      category: [decision, error, achievement, convention, fact]
+  - action: delete_memory
+    allow: true
+    requires: [older_than_days_30]
+  - action: recall_memory
+    allow: true
+
+  # Coding actions
+  - action: file_edited
+    allow: true
+  - action: file_read
+    allow: true
+  - action: git_pushed
+    allow: true
+    requires: [approved_by_user]
+  - action: git_committed
+    allow: true
+  - action: test_run
+    allow: true
+  - action: build_run
+    allow: true
+  - action: lint_run
+    allow: true
+  - action: dependency_installed
+    allow: true
+    requires: [approved_by_user]
+  - action: deployed
+    allow: true
+    requires: [approved_by_user]
+  - action: migration_run
+    allow: true
+    requires: [approved_by_user]
+
+  # Hard denials
+  - action: modify_ci_config
+    allow: false
+  - action: access_production_database
+    allow: false
+  - action: send_email
+    allow: false
+  - action: make_purchase
+    allow: false

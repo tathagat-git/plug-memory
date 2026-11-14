@@ -1,0 +1,24 @@
+{
+  "_comment": "Cursor MCP config — add this to your Cursor settings (Settings > MCP)",
+  "_comment_setup": "1. Run: agentmemory init ~/my-cursor-agent --type coding",
+  "_comment_setup_2": "2. Open Cursor > Settings > MCP > Add new MCP Server",
+  "_comment_setup_3": "3. Paste the config below (without the _comment fields)",
+  "mcpServers": {
+    "plug-play-memory": {
+      "command": "agentmemory",
+      "args": [
+        "serve",
+        "--db",
+        "/absolute/path/to/my-cursor-agent/memory.db",
+        "--config",
+        "/absolute/path/to/my-cursor-agent/config.yaml",
+        "--policies",
+        "/absolute/path/to/my-cursor-agent/policies/custom"
+      ],
+      "env": {
+        "AGENTMEMORY_AGENT_ID": "cursor-coder",
+        "AGENTMEMORY_AGENT_TYPE": "coding"
+      }
+    }
+  }
+}
