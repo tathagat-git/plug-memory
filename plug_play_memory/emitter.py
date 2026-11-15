@@ -224,109 +224,28 @@ class EventEmitter:
     # Core emit logic — judge → policy → dedup → store
     # ------------------------------------------------------------------
 
-    def _emit(
-        self,
-        action: str,
-        inputs: dict[str, Any],
-        outputs: dict[str, Any],
-        outcome: str,
-        raw: str,
-    ):
-        event = AgentEvent(
-            agent_id=self.agent_id,
-            agent_type=self.agent_type,
-            action=action,
-            inputs=inputs,
-            outputs=outputs,
-            outcome=outcome,
-            raw=raw,
-        )
-
-        # Step 1: judge
+    def _emit(self, action, inputs, outputs, outcome, raw):
+        event = AgentEvent(agent_id=self.agent_id, agent_type=self.agent_type, action=action, inputs=inputs, outputs=outputs, outcome=outcome, raw=raw)
         decision = self.judge.evaluate(event)
-
+        jd = {"should_save":decision.should_save,"category":decision.category,"tier":decision.tier,"key":decision.key,"importance":decision.importance,"salience_score":decision.salience_score,"tagged":decision.tagged,"summary":decision.summary,"discard_reason":decision.discard_reason}
+        event_id = self.store.log_event(agent_id=self.agent_id,agent_type=self.agent_type,action=action,inputs=inputs,outputs=outputs,outcome=outcome,raw=raw,judge_decision=jd,judge_version=self.judge.VERSION)
         if not decision.should_save:
-            self.store.audit.log(
-                self.agent_id, "event_discarded",
-                {
-                    "action": action, "outcome": outcome,
-                    "reason": decision.discard_reason,
-                },
-            )
+            self.store.audit.log(self.agent_id,"event_discarded",{"action":action,"outcome":outcome,"reason":decision.discard_reason,"event_id":event_id})
             return None
+        return self._write_decision(decision, action, inputs, outputs, outcome, raw, event_id)
 
-        return self._write_decision(decision, action, inputs, outputs, outcome, raw)
-
-    def _write_decision(
-        self,
-        decision,
-        action: str,
-        inputs: dict[str, Any],
-        outputs: dict[str, Any],
-        outcome: str,
-        raw: str,
-    ):
-        """Shared write path: policy gate → dedup → store → audit. Used by _emit and fact_observed."""
-
-        # Step 2: policy gate — agent must have write_memory permission for this category
-        # M5 fix: pass agent_type explicitly to avoid shared-state mutation
-        policy_decision = self.policy.check(
-            self.agent_id, "write_memory",
-            {
-                "source": "event_judge",
-                "action": action,
-                "category": decision.category,
-                "tier": decision.tier,
-            },
-            agent_type=self.agent_type,
-        )
-        # Log as permission_check so coverage_manifest picks it up
-        self.store.audit.log(
-            self.agent_id, "permission_check",
-            {
-                "action": "write_memory",
-                "context": {
-                    "source": "event_judge",
-                    "event_action": action,
-                    "category": decision.category,
-                    "tier": decision.tier,
-                },
-                "backend": "layered_yaml",
-                "reason": policy_decision.reason,
-                "layers": policy_decision.layers_evaluated,
-            },
-            allowed=policy_decision.allowed,
-        )
-        if not policy_decision.allowed:
-            return None
-
-        # Step 3: dedup — skip if same key + same value already exists
+    def _write_decision(self, decision, action, inputs, outputs, outcome, raw, event_id=""):
+        """policy gate -> dedup -> surface_event"""
+        policy_decision = self.policy.check(self.agent_id,"write_memory",{"source":"event_judge","action":action,"category":decision.category,"tier":decision.tier},agent_type=self.agent_type)
+        self.store.audit.log(self.agent_id,"permission_check",{"action":"write_memory","context":{"source":"event_judge","event_action":action,"category":decision.category,"tier":decision.tier},"backend":"layered_yaml","reason":policy_decision.reason,"layers":policy_decision.layers_evaluated},allowed=policy_decision.allowed)
+        if not policy_decision.allowed: return None
         if decision.key and self._is_duplicate(decision.key, decision.summary):
-            self.store.audit.log(
-                self.agent_id, "event_deduplicated",
-                {"action": action, "key": decision.key},
-            )
+            self.store.audit.log(self.agent_id,"event_deduplicated",{"action":action,"key":decision.key})
             return None
-
-        # Step 4: write with rich metadata
-        fact = self.store.remember(
-            agent_id=self.agent_id,
-            value=decision.summary,
-            tier=decision.tier,
-            key=decision.key,
-            importance=decision.importance,
-            salience_score=decision.salience_score,
-            tagged=decision.tagged,
-            metadata={
-                "source": "event_judge",
-                "agent_type": self.agent_type,
-                "action": action,
-                "category": decision.category,
-                "outcome": outcome,
-                "inputs": inputs,
-                "outputs": outputs,
-            },
-        )
+        if event_id:
+            fact = self.store.surface_event(event_id=event_id,agent_id=self.agent_id,value=decision.summary,tier=decision.tier,key=decision.key,importance=decision.importance,salience_score=decision.salience_score,tagged=decision.tagged,metadata={"source":"event_judge","agent_type":self.agent_type,"action":action,"category":decision.category,"outcome":outcome,"inputs":inputs,"outputs":outputs,"event_id":event_id})
+        else:
+            fact = self.store.remember(agent_id=self.agent_id,value=decision.summary,tier=decision.tier,key=decision.key,importance=decision.importance,salience_score=decision.salience_score,tagged=decision.tagged,metadata={"source":"event_judge","agent_type":self.agent_type,"action":action,"category":decision.category,"outcome":outcome,"inputs":inputs,"outputs":outputs})
         return fact
 
     def _is_duplicate(self, key: str, value: str) -> bool:

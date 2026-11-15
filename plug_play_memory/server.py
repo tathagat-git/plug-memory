@@ -309,6 +309,22 @@ def build_server(
         f_stats = consolidator.forget_unused(ctx.agent_id)
         return {"consolidation": c_stats, "forgetting": f_stats}
 
+
+    # v0.3: rejudge_events + event_log_stats
+
+    @server.tool(description="Re-evaluate ALL events in event_log with current judge rules. Events previously discarded can be surfaced. Zero data loss.")
+    def rejudge_events() -> dict:
+        ctx = get_auth()
+        _require_scope(ctx, "admin:consolidate")
+        stats = consolidator.rejudge(ctx.agent_id, judge)
+        return {"judge_version": judge.VERSION, "stats": stats}
+
+    @server.tool(description="Get stats about the event_log: total events, surfaced, discarded (rejudgable).")
+    def event_log_stats() -> dict:
+        ctx = get_auth()
+        _require_scope(ctx, "admin:audit")
+        return store.get_event_log_stats(ctx.agent_id)
+
     @server.tool(description=(
         "List all policy layers currently loaded for the system, plus the "
         "action whitelist for this agent's type."

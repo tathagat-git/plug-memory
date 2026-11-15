@@ -25,7 +25,7 @@ from typing import Any, Callable
 
 from .audit import AuditLog
 
-SCHEMA_VERSION = 2  # bumped from 1 → 2 for security-hardened release
+SCHEMA_VERSION = 3  # bumped from 1 → 2 for security-hardened release
 EMBEDDING_DIM = 256
 
 # Names users cannot use as agent_id (would collide with policy layer names)
@@ -37,7 +37,7 @@ RESERVED_AGENT_IDS = {"_base", "coding", "study", "financial", "default", "all"}
 # ---------------------------------------------------------------------------
 
 def default_embedder(text: str, dim: int = EMBEDDING_DIM) -> list[float]:
-    """Deterministic BLAKE2b-based embedder. Survives restarts (unlike hash())."""
+    """Deterministic BLAKE2b-based embedder. Survives restarts """
     vec = [0.0] * dim
     for token in text.lower().split():
         h = int.from_bytes(hashlib.blake2b(token.encode(), digest_size=8).digest(), "big")
@@ -237,6 +237,8 @@ class MemoryStore:
         # Migration 1 → 2: security hardening (add columns if missing)
         if from_version < 2:
             self._migrate_v1_to_v2(conn)
+        if from_version < 3:
+            self._migrate_v2_to_v3(conn)
 
     def _migrate_v0_to_v1(self, conn: sqlite3.Connection) -> None:
         conn.executescript(
@@ -493,3 +495,61 @@ class MemoryStore:
             recall_count=row["recall_count"], superseded=bool(row["superseded"]),
             metadata=json.loads(row["metadata"]),
         )
+
+    # v0.3: Append-only event log + re-judge
+
+    def log_event(self, agent_id, agent_type, action, inputs=None, outputs=None,
+                  outcome="success", raw="", judge_decision=None, judge_version=""):
+        """Append to event_log. ALWAYS succeeds."""
+        validate_agent_id(agent_id)
+        import uuid as _uuid
+        eid = str(_uuid.uuid4())
+        conn = self._conn
+        conn.execute("INSERT INTO event_log (id,agent_id,agent_type,action,inputs,outputs,outcome,raw,timestamp,judge_decision,judge_version,surfaced) VALUES (?,?,?,?,?,?,?,?,?,?,?,0)",
+            (eid,agent_id,agent_type,action,json.dumps(inputs or {}),json.dumps(outputs or {}),outcome,raw,time.time(),json.dumps(judge_decision or {}),judge_version))
+        conn.commit()
+        return eid
+
+    def surface_event(self, event_id, agent_id, value, tier="archival", key=None,
+                      importance="normal", salience_score=0.5, tagged=False, metadata=None):
+        """Promote from event_log to facts."""
+        validate_agent_id(agent_id)
+        conn = self._conn
+        row = conn.execute("SELECT surfaced FROM event_log WHERE id=?", (event_id,)).fetchone()
+        if not row or row["surfaced"]: return None
+        fact = self.remember(agent_id=agent_id,value=value,tier=tier,key=key,importance=importance,salience_score=salience_score,tagged=tagged,metadata=metadata)
+        conn.execute("UPDATE event_log SET surfaced=1,surfaced_at=?,fact_id=? WHERE id=?",(time.time(),fact.id,event_id))
+        conn.commit()
+        return fact
+
+    def unsurface_event(self, event_id, agent_id):
+        """Remove from facts, keep in event_log."""
+        validate_agent_id(agent_id)
+        conn = self._conn
+        row = conn.execute("SELECT fact_id FROM event_log WHERE id=?", (event_id,)).fetchone()
+        if not row or not row["fact_id"]: return False
+        self.forget(agent_id, row["fact_id"], hard=False)
+        conn.execute("UPDATE event_log SET surfaced=0,surfaced_at=NULL,fact_id=NULL WHERE id=?",(event_id,))
+        conn.commit()
+        return True
+
+    def update_event_judge_decision(self, event_id, judge_decision, judge_version):
+        conn = self._conn
+        conn.execute("UPDATE event_log SET judge_decision=?,judge_version=? WHERE id=?",(json.dumps(judge_decision),judge_version,event_id))
+        conn.commit()
+
+    def get_all_events(self, agent_id, only_unsurfaced=False):
+        validate_agent_id(agent_id)
+        if only_unsurfaced:
+            rows = self._conn.execute("SELECT * FROM event_log WHERE agent_id=? AND surfaced=0 ORDER BY timestamp",(agent_id,)).fetchall()
+        else:
+            rows = self._conn.execute("SELECT * FROM event_log WHERE agent_id=? ORDER BY timestamp",(agent_id,)).fetchall()
+        return [{"id":r["id"],"agent_id":r["agent_id"],"agent_type":r["agent_type"],"action":r["action"],"inputs":json.loads(r["inputs"]),"outputs":json.loads(r["outputs"]),"outcome":r["outcome"],"raw":r["raw"],"timestamp":r["timestamp"],"judge_decision":json.loads(r["judge_decision"]),"judge_version":r["judge_version"],"surfaced":bool(r["surfaced"]),"surfaced_at":r["surfaced_at"],"fact_id":r["fact_id"]} for r in rows]
+
+    def get_event_log_stats(self, agent_id):
+        validate_agent_id(agent_id)
+        conn = self._conn
+        total = conn.execute("SELECT COUNT(*) as c FROM event_log WHERE agent_id=?",(agent_id,)).fetchone()["c"]
+        surfaced = conn.execute("SELECT COUNT(*) as c FROM event_log WHERE agent_id=? AND surfaced=1",(agent_id,)).fetchone()["c"]
+        return {"total_events":total,"surfaced":surfaced,"discarded":total-surfaced,"rejudgable":total-surfaced}
+

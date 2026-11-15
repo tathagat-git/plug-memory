@@ -170,3 +170,29 @@ class Consolidator:
                 (order[new_idx], time.time(), fact_id),
             )
             conn.commit()
+
+    # v0.3: Re-judge
+
+    def rejudge(self, agent_id, judge):
+        """Re-evaluate ALL events with current judge rules."""
+        from .events import AgentEvent
+        all_events = self.store.get_all_events(agent_id, only_unsurfaced=False)
+        stats = {"rejudged":0,"newly_surfaced":0,"unsurfaced":0,"unchanged":0}
+        for ed in all_events:
+            event = AgentEvent(agent_id=ed["agent_id"],agent_type=ed["agent_type"],action=ed["action"],inputs=ed["inputs"],outputs=ed["outputs"],outcome=ed["outcome"],raw=ed["raw"])
+            nd = judge.evaluate(event)
+            jd = {"should_save":nd.should_save,"category":nd.category,"tier":nd.tier,"key":nd.key,"importance":nd.importance,"salience_score":nd.salience_score,"tagged":nd.tagged,"summary":nd.summary,"discard_reason":nd.discard_reason}
+            self.store.update_event_judge_decision(ed["id"],jd,judge.VERSION)
+            stats["rejudged"] += 1
+            ws = ed["surfaced"]; sbs = nd.should_save
+            if sbs and not ws:
+                self.store.surface_event(event_id=ed["id"],agent_id=agent_id,value=nd.summary,tier=nd.tier,key=nd.key,importance=nd.importance,salience_score=nd.salience_score,tagged=nd.tagged,metadata={"source":"rejudge","agent_type":ed["agent_type"],"action":ed["action"],"category":nd.category,"outcome":ed["outcome"],"inputs":ed["inputs"],"outputs":ed["outputs"],"event_id":ed["id"],"rejudged_with":judge.VERSION})
+                stats["newly_surfaced"] += 1
+            elif not sbs and ws:
+                self.store.unsurface_event(ed["id"],agent_id)
+                stats["unsurfaced"] += 1
+            else:
+                stats["unchanged"] += 1
+        self.store.audit.log(agent_id,"rejudge",{"judge_version":judge.VERSION,"stats":stats})
+        return stats
+

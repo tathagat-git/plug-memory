@@ -361,6 +361,8 @@ class SalienceScorer:
 class Judge:
     """The full judge pipeline: rules → heuristics → salience."""
 
+    VERSION = "v0.3-rules-v1": rules → heuristics → salience."""
+
     def __init__(self, history_lookup: Any = None):
         self.rules = RulesJudge()
         self.heuristics = HeuristicEnricher()
